@@ -18,12 +18,15 @@ const process = require("process");
 const cheerio = require("cheerio");
 const fs = require("fs");
 const os = require("os");
+const path = require("path");
 
 const args = arg({
   '--wiki': Boolean,
 });
 
 const PATHPREFIX = './public';
+
+const skipPages = new RegExp('/wiki/((BadContent)|(TitleIndex)|(Trac.*))');
 
 const removeThese = [
   '#metanav', '#mainnav', '#ctxtnav', '#search',
@@ -46,6 +49,7 @@ function sleep(ms) {
 
 async function processPage(baseURL, pagePath, opt) {
   let page;
+  let assets = [];
   let sitePath = `${PATHPREFIX}/${pagePath}`;
   try {
     pagePath = decodeURIComponent(pagePath);
@@ -55,7 +59,7 @@ async function processPage(baseURL, pagePath, opt) {
   }
   fs.mkdirSync(sitePath, {recursive: true});
   try {
-    console.log(`=======${baseURL}${pagePath}=========`);
+    console.log(`${baseURL}${pagePath}`);
     page = await axios.get(`${baseURL}${pagePath}`);
   } catch (error) {
     console.error(`error fetching ${baseURL}${pagePath}`, error);
@@ -90,18 +94,12 @@ async function processPage(baseURL, pagePath, opt) {
      $('.foldable').enableFolding(true, true); });
   </script>\n`);
   // find remaining assets
-  $('link[rel="stylesheet"]').each(function() {
-    console.debug(`stylesheet ${$(this).attr("href")}`);
+  $('link[rel="stylesheet"],a.attachment').each(function() {
+    assets.push($(this).attr("href"));
   });
-  $('script[src]').each(function() {
-    console.debug(`JavaScript ${$(this).attr("src")}`);
+  $('script[src],img').each(function() {
+    assets.push($(this).attr("src"));
   });
-  $('img').each(function() {
-    console.debug(`img ${$(this).attr("src")}`);
-  });
-  $('a.attachment').each(function(){
-    console.debug(`attachment: ${$(this).attr("href")}`);
-  })
   if (opt.nowiki) {
     $('a').each(function(){
       let href = $(this).attr('href');
@@ -115,6 +113,30 @@ async function processPage(baseURL, pagePath, opt) {
   } catch (e) {
     console.error('Unable to write .${pagePath}/index.html');
     process.exit(1);
+  }
+  // fetch the assets (that we don't have)
+  for (let asset of assets) {
+    let assetPath = `${PATHPREFIX}${asset}`;
+    let assetDir = path.dirname(assetPath);
+    try {
+      fs.accessSync(assetPath);
+      console.log(`--- ${asset}`);
+    } catch (e) {
+      let res;
+      console.log(`+++ ${asset}`);
+      fs.mkdirSync(assetDir, {recursive: true});
+      try {
+        res = await axios.get(`${baseURL}${asset}`);
+      } catch (error) {
+        console.error(`error fetching asset ${asset}`, error);
+        return;
+      }
+      try {
+        fs.writeFileSync(assetPath, res.data);
+      } catch (e) {
+        console.error(`Unable to save asset ${asset} to ${assetPath}`)
+      }
+    }
   }
 }
 
@@ -130,10 +152,13 @@ async function wiki(baseURL, opt) {
     console.error(error);
   }
   for (let page of pages) {
+    if (page.match(skipPages)) {
+      console.log(`${page} >>> SKIPPED`);
+      continue;
+    }
     await sleep(1000);
     await processPage(baseURL, page, opt);
   }
-
 }
 
 function usage() {
@@ -146,5 +171,8 @@ if (args._.length != 1) {
 }
 let baseURL = args._[0].replace(/\/$/, '');
 
-fs.rmdirSync('./site', {recursive: true});
+try {
+  fs.rmdirSync('./site', {recursive: true});
+} catch {
+}
 wiki(baseURL, {nowiki: args['--wiki']});
