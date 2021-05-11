@@ -79,6 +79,7 @@ async function processPage(baseURL, pagePath, opt) {
   $('head').empty().append(head);
   $('head').prepend('<meta charset="utf-8">');
   $('link[rel="icon"]').removeAttr('type');
+  $('#attachments p:contains("Download all attachments as:")').remove();
   $('script[src^="http"]').each(function() {
     let src = $(this).attr('src');
     src = src.replace(/^https:\/\/exelearning.org/i, '');
@@ -95,10 +96,16 @@ async function processPage(baseURL, pagePath, opt) {
   </script>\n`);
   // find remaining assets
   $('link[rel="stylesheet"],a.attachment').each(function() {
-    assets.push($(this).attr("href"));
+    let href = $(this).attr("href");
+    if (href && !href.startsWith("http")) {
+      assets.push(href);
+    }
   });
   $('script[src],img').each(function() {
-    assets.push($(this).attr("src"));
+    let src = $(this).attr("src");
+    if (src && !src.startsWith("http")) {
+      assets.push(src);
+    }
   });
   if (opt.nowiki) {
     $('a').each(function(){
