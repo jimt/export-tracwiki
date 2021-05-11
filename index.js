@@ -89,6 +89,19 @@ async function processPage(baseURL, pagePath, opt) {
   $('head').append(`<script>jQuery(document).ready(function($) {
      $('.foldable').enableFolding(true, true); });
   </script>\n`);
+  // find remaining assets
+  $('link[rel="stylesheet"]').each(function() {
+    console.debug(`stylesheet ${$(this).attr("href")}`);
+  });
+  $('script[src]').each(function() {
+    console.debug(`JavaScript ${$(this).attr("src")}`);
+  });
+  $('img').each(function() {
+    console.debug(`img ${$(this).attr("src")}`);
+  });
+  $('a.attachment').each(function(){
+    console.debug(`attachment: ${$(this).attr("href")}`);
+  })
   if (opt.nowiki) {
     $('a').each(function(){
       let href = $(this).attr('href');
@@ -112,7 +125,6 @@ async function wiki(baseURL, opt) {
     let $ = cheerio.load(index.data);
     $('li>a', '.titleindex').each(function(i,e) {
       pages.push($(this).attr('href'));
-      console.log($(this).attr('href'));
     })
   } catch (error) {
     console.error(error);
