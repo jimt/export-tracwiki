@@ -1,0 +1,25 @@
+{
+  "name": "export-tracwiki",
+  "version": "0.1.0",
+  "description": "Export a trac wiki as static HTML",
+  "dependencies": {
+    "arg": "^5.0.0",
+    "axios": "^0.21.1",
+    "cheerio": "^1.0.0-rc.9",
+    "ini": "^2.0.0"
+  },
+  "scripts": {
+    "run": "node index.js",
+    "serve": "npx http-server"
+  },
+  "main": "index.js",
+  "author": "Jim Tittsler <jimt@onjapan.net>",
+  "repository": "github:jimt/export-tracwiki",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14"
+  },
+  "devDependencies": {
+    "http-server": "^0.12.3"
+  }
+}
