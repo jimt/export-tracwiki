@@ -24,6 +24,7 @@ const args = arg({
 });
 
 const PATHPREFIX = './public';
+const PROJECTLOGO = '/site/exe.png';
 
 const skipPages = new RegExp('/wiki/((BadContent)|(Trac.*))');
 
@@ -35,7 +36,7 @@ const removeThese = [
   'meta[http-equiv]', 'meta[name="ROBOTS"]',
   'script:not([src])', 'script[src$="/site/js/babel.js"]',
   'script[src$="/site/js/search.js"]',
-  'span[class="icon"]', 'a[class="trac-rawlink"]'
+  'span.icon', 'a.trac-rawlink'
 ];
 /**
  * @param {number} ms
@@ -93,7 +94,25 @@ async function processPage(baseURL, pagePath, opt) {
   $('head').append(`<script>jQuery(document).ready(function($) {
      $('.foldable').enableFolding(true, true); });
   </script>\n`);
+
+  // collapse attachment and raw-attachments in body and #attachments
+  $('img[src^="/raw-attachment/"]').each(function() {
+    let src = $(this).attr('src')
+                     .replace(/^\/raw-attachment\//, '/attachment/');
+    $(this).attr('src', src);
+
+  });
+  $('li', '#attachments').each(function() {
+    let li = $(this).html().replace(/added by[\s\S]+<em>anonymous<\/em>/, '');
+    $(this).html(li);
+  });
+  $('a.timeline').each(function(){
+    let ts = $(this).attr('title').replace(/[^0-9]+([-0-9]+).*/, '$1');
+    $(this).replaceWith(ts);
+  });
+
   // find remaining assets
+  $('img[src="/chrome/site/your_project_logo.png"]').attr('src', PROJECTLOGO);
   $('link[rel="stylesheet"],a.attachment').each(function() {
     let href = $(this).attr("href");
     if (href && !href.startsWith("http")) {
@@ -124,14 +143,7 @@ async function processPage(baseURL, pagePath, opt) {
     <li><a href="https://sourceforge.net/projects/exe/">Source<b>Forge</b></a> (Source code)</li>
   </ul>
   </footer>`);
-  $('li', '#attachments').each(function() {
-    let li = $(this).html().replace(/added by[\s\S]+<em>anonymous<\/em>/, '');
-    $(this).html(li);
-  });
-  $('a.timeline').each(function(){
-    let ts = $(this).attr('title').replace(/[^0-9]+([-0-9]+).*/, '$1');
-    $(this).replaceWith(ts);
-  });
+
   if (opt.nowiki) {
     $('a').each(function(){
       let href = $(this).attr('href');
@@ -158,7 +170,13 @@ async function processPage(baseURL, pagePath, opt) {
       console.log(`+++ ${asset}`);
       fs.mkdirSync(assetDir, {recursive: true});
       try {
-        res = await axios.get(`${baseURL}${asset}`, {responseType: 'stream'});
+        let fetchPath = `${baseURL}${asset}`;
+        if (asset.startsWith('/attachment/')) {
+          fetchPath = baseURL + asset.replace(/^\/attachment\//, '/raw-attachment/');
+        } else if (asset == PROJECTLOGO) {
+          fetchPath = baseURL + '/chrome/site/your_project_logo.png';
+        }
+        res = await axios.get(fetchPath, {responseType: 'stream'});
         res.data.pipe(fs.createWriteStream(assetPath));
       } catch (error) {
         console.error(`error fetching asset ${asset}`, error);
