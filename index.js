@@ -9,7 +9,7 @@ Copyright 2021 James Tittsler
 // fetch wiki TitleIndex page
 // for each page
 //   fetch page
-//   strip unwanted header, footer, etc.
+//   strip unwanted header, menus, etc.
 //   write to site directory
 
 const arg = require('arg');
@@ -17,7 +17,6 @@ const axios = require('axios').default;
 const process = require("process");
 const cheerio = require("cheerio");
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 
 const args = arg({
@@ -26,11 +25,11 @@ const args = arg({
 
 const PATHPREFIX = './public';
 
-const skipPages = new RegExp('/wiki/((BadContent)|(TitleIndex)|(Trac.*))');
+const skipPages = new RegExp('/wiki/((BadContent)|(Trac.*))');
 
 const removeThese = [
   '#metanav', '#mainnav', '#ctxtnav', '#search',
-  '#footer', '#altlinks', '.trac-modifiedby',
+  '#altlinks', '.trac-modifiedby',
   'link[rel="search"]', 'link[rel="help"]', 'link[rel="alternate"]',
   'link[rel="start"]', 'link[rel="shortcut icon"]', '#trac-noscript',
   'meta[http-equiv]', 'meta[name="ROBOTS"]',
@@ -99,6 +98,9 @@ async function processPage(baseURL, pagePath, opt) {
     let href = $(this).attr("href");
     if (href && !href.startsWith("http")) {
       assets.push(href);
+      if (href.endsWith('wiki.css')) {
+        assets.push(href.replace('wiki.css', 'code.css'));
+      }
     }
   });
   $('script[src],img').each(function() {
@@ -106,6 +108,29 @@ async function processPage(baseURL, pagePath, opt) {
     if (src && !src.startsWith("http")) {
       assets.push(src);
     }
+  });
+  $('#header').replaceWith(function() {
+    return $("<header />").append($(this).contents());
+  });
+  $('#footer').replaceWith(`<footer>
+  <ul class="footer-copyright">
+    <li>Copyright 2004-2005 University of Auckland<br>
+    Copyright 2004-2021 <a href="https://eXeLearning.org/">eXe Project</a><br>
+    <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br /><small>This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</small></a>.</li>
+  </ul>
+  <ul class="footer-links">
+    <li><a href="/wiki/About/">About</a></li>
+    <li><a href="/wiki/TitleIndex/">Site Index</a></li>
+    <li><a href="https://sourceforge.net/projects/exe/">Source<b>Forge</b></a> (Source code)</li>
+  </ul>
+  </footer>`);
+  $('li', '#attachments').each(function() {
+    let li = $(this).html().replace(/added by[\s\S]+<em>anonymous<\/em>/, '');
+    $(this).html(li);
+  });
+  $('a.timeline').each(function(){
+    let ts = $(this).attr('title').replace(/[^0-9]+([-0-9]+).*/, '$1');
+    $(this).replaceWith(ts);
   });
   if (opt.nowiki) {
     $('a').each(function(){
@@ -133,15 +158,11 @@ async function processPage(baseURL, pagePath, opt) {
       console.log(`+++ ${asset}`);
       fs.mkdirSync(assetDir, {recursive: true});
       try {
-        res = await axios.get(`${baseURL}${asset}`);
+        res = await axios.get(`${baseURL}${asset}`, {responseType: 'stream'});
+        res.data.pipe(fs.createWriteStream(assetPath));
       } catch (error) {
         console.error(`error fetching asset ${asset}`, error);
         return;
-      }
-      try {
-        fs.writeFileSync(assetPath, res.data);
-      } catch (e) {
-        console.error(`Unable to save asset ${asset} to ${assetPath}`)
       }
     }
   }
