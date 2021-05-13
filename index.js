@@ -26,7 +26,7 @@ const args = arg({
 const PATHPREFIX = './public';
 const PROJECTLOGO = '/site/exe.png';
 
-const skipPages = new RegExp('/wiki/((BadContent)|(Trac.*))');
+const skipPages = new RegExp('/wiki/((BadContent)|(Trac.*)|(Wiki.*))');
 
 const removeThese = [
   '#metanav', '#mainnav', '#ctxtnav', '#search',
@@ -38,6 +38,9 @@ const removeThese = [
   'script[src$="/site/js/search.js"]',
   'span.icon', 'a.trac-rawlink'
 ];
+
+var fetchErrors = [];
+
 /**
  * @param {number} ms
  */
@@ -45,6 +48,16 @@ function sleep(ms) {
   return new Promise(resolve => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * map old fetchable path to new site path
+ * @param {string} asset
+ */
+function assetStoragePath(asset) {
+  let path = asset.replace(/^\/raw-attachment\//, '/attachment/');
+  path = path.replace('/chrome/site/your_project_logo.png', PROJECTLOGO);
+  return PATHPREFIX + path;
 }
 
 async function processPage(baseURL, pagePath, opt) {
@@ -63,16 +76,20 @@ async function processPage(baseURL, pagePath, opt) {
     page = await axios.get(`${baseURL}${pagePath}`);
   } catch (error) {
     console.error(`error fetching ${baseURL}${pagePath}`, error);
+    fetchErrors.push(pagePath);
     return;
   }
 
-  // pretend we are html5
+  // claim to be html5
   let pageContents = page.data;
   pageContents = pageContents.replace(/xmlns="[^"]+"/, 'lang="en"');
+
   let $ = cheerio.load(pageContents);
   $(removeThese.join(',')).remove();
+
   // remove #acl lines
   $('p:contains("#acl ")').remove();
+
   // remove comments from head
   let head = $('head').html();
   head = head.replace(/<!--\s*[\s\S]*?-->\s*/, '');
@@ -80,6 +97,7 @@ async function processPage(baseURL, pagePath, opt) {
   $('head').prepend('<meta charset="utf-8">');
   $('link[rel="icon"]').removeAttr('type');
   $('#attachments p:contains("Download all attachments as:")').remove();
+
   $('script[src^="http"]').each(function() {
     let src = $(this).attr('src');
     src = src.replace(/^https:\/\/exelearning.org/i, '');
@@ -90,11 +108,38 @@ async function processPage(baseURL, pagePath, opt) {
     href = href.replace(/^https:\/\/exelearning.org/i, '');
     $(this).attr('href', href);
   });
+
   // simplified replacement inline script
   $('head').append(`<script>jQuery(document).ready(function($) {
      $('.foldable').enableFolding(true, true); });
   </script>\n`);
 
+  // show dates rather than DateTime function
+  $('s.missing').each(function() {
+    let re = /\s*DateTime\(()\)/.exec($(this).text());
+    if (re) {
+      $(this).replaceWith(re[1]);
+    }
+  });
+
+  // find remaining assets
+  $('link[rel="stylesheet"],#attachments a[href^="/attachment/"]').each(function() {
+    let href = $(this).attr("href");
+    if (href && !href.startsWith("http")) {
+      assets.push(href);
+      if (href.endsWith('wiki.css')) {
+        assets.push(href.replace('wiki.css', 'code.css'));
+      }
+    }
+  });
+  $('script[src],img').each(function() {
+    let src = $(this).attr("src");
+    if (src && !src.startsWith("http")) {
+      assets.push(src);
+    }
+  });
+
+  $('img[src="/chrome/site/your_project_logo.png"]').attr('src', PROJECTLOGO);
   // collapse attachment and raw-attachments in body and #attachments
   $('img[src^="/raw-attachment/"]').each(function() {
     let src = $(this).attr('src')
@@ -109,24 +154,6 @@ async function processPage(baseURL, pagePath, opt) {
   $('a.timeline').each(function(){
     let ts = $(this).attr('title').replace(/[^0-9]+([-0-9]+).*/, '$1');
     $(this).replaceWith(ts);
-  });
-
-  // find remaining assets
-  $('img[src="/chrome/site/your_project_logo.png"]').attr('src', PROJECTLOGO);
-  $('link[rel="stylesheet"],a.attachment').each(function() {
-    let href = $(this).attr("href");
-    if (href && !href.startsWith("http")) {
-      assets.push(href);
-      if (href.endsWith('wiki.css')) {
-        assets.push(href.replace('wiki.css', 'code.css'));
-      }
-    }
-  });
-  $('script[src],img').each(function() {
-    let src = $(this).attr("src");
-    if (src && !src.startsWith("http")) {
-      assets.push(src);
-    }
   });
   $('#header').replaceWith(function() {
     return $("<header />").append($(this).contents());
@@ -152,15 +179,17 @@ async function processPage(baseURL, pagePath, opt) {
       }
     });
   }
+
   try {
     fs.writeFileSync(`${sitePath}/index.html`, $.html());
   } catch (e) {
     console.error('Unable to write .${pagePath}/index.html');
     process.exit(1);
   }
+
   // fetch the assets (that we don't have)
   for (let asset of assets) {
-    let assetPath = `${PATHPREFIX}${asset}`;
+    let assetPath = assetStoragePath(asset);
     let assetDir = path.dirname(assetPath);
     try {
       fs.accessSync(assetPath);
@@ -170,16 +199,13 @@ async function processPage(baseURL, pagePath, opt) {
       console.log(`+++ ${asset}`);
       fs.mkdirSync(assetDir, {recursive: true});
       try {
-        let fetchPath = `${baseURL}${asset}`;
-        if (asset.startsWith('/attachment/')) {
-          fetchPath = baseURL + asset.replace(/^\/attachment\//, '/raw-attachment/');
-        } else if (asset == PROJECTLOGO) {
-          fetchPath = baseURL + '/chrome/site/your_project_logo.png';
-        }
+        // always fetch the raw attachment, regardless of what is requested
+        let fetchPath = baseURL + asset.replace(/^\/attachment\//, '/raw-attachment/');
         res = await axios.get(fetchPath, {responseType: 'stream'});
         res.data.pipe(fs.createWriteStream(assetPath));
       } catch (error) {
         console.error(`error fetching asset ${asset}`, error);
+        fetchErrors.push(asset);
         return;
       }
     }
@@ -205,6 +231,10 @@ async function wiki(baseURL, opt) {
     await sleep(1000);
     await processPage(baseURL, page, opt);
   }
+  console.log(`errors: ${fetchErrors.length}`);
+  if (fetchErrors.length) {
+    console.error(fetchErrors);
+  }
 }
 
 function usage() {
@@ -217,8 +247,4 @@ if (args._.length != 1) {
 }
 let baseURL = args._[0].replace(/\/$/, '');
 
-try {
-  fs.rmdirSync('./site', {recursive: true});
-} catch {
-}
 wiki(baseURL, {nowiki: args['--wiki']});
