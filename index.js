@@ -26,7 +26,7 @@ const args = arg({
 const PATHPREFIX = './public';
 const PROJECTLOGO = '/site/exe.png';
 
-const skipPages = new RegExp('/wiki/((BadContent)|(Trac.*)|(Wiki.*))');
+const skipPages = new RegExp('/wiki/((BadContent)|(Trac.*)|(Wiki(?!Start).*))');
 
 const removeThese = [
   '#metanav', '#mainnav', '#ctxtnav', '#search',
