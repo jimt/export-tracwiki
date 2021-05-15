@@ -139,6 +139,12 @@ async function processPage(baseURL, pagePath, opt) {
     }
   });
 
+  // consolidate CSS & JS
+  $('link[href="/site/css/trac.css"]').attr('href', '/site/css/site.css');
+  $('link[href="/site/css/wiki.css"]').remove();
+  $('script[src="/site/js/trac.js"]').attr('src', '/site/js/site.js');
+  $('script[src="/site/js/folding.js"]').remove();
+
   $('img[src="/chrome/site/your_project_logo.png"]').attr('src', PROJECTLOGO);
   // collapse attachment and raw-attachments in body and #attachments
   $('img[src^="/raw-attachment/"]').each(function() {
@@ -159,12 +165,12 @@ async function processPage(baseURL, pagePath, opt) {
     return $("<header />").append($(this).contents());
   });
   $('#footer').replaceWith(`<footer>
-  <ul class="footer-copyright">
+  <ul id="footer-copyright">
     <li>Copyright 2004-2005 University of Auckland<br>
     Copyright 2004-2021 <a href="https://eXeLearning.org/">eXe Project</a><br>
     <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br /><small>This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</small></a>.</li>
   </ul>
-  <ul class="footer-links">
+  <ul id="footer-links">
     <li><a href="/wiki/About/">About</a></li>
     <li><a href="/wiki/TitleIndex/">Site Index</a></li>
     <li><a href="https://sourceforge.net/projects/exe/">Source<b>Forge</b></a> (Source code)</li>
