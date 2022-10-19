@@ -12,10 +12,9 @@ recent revision of the site.
 
 <dl>
   <dt>--wiki</dt>
-  <dd>remove `/wiki` from resulting pages and URLs</dd>
+  <dd>remove <code>/wiki</code> from resulting pages and URLs</dd>
 </dl>
 
 ## License
 
 MIT
-
