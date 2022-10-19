@@ -244,7 +244,7 @@ async function wiki(baseURL, opt) {
 }
 
 function usage() {
-  console.error('{--wiki} {--output DIR} WIKIURL');
+  console.error('{--wiki} WIKIURL');
   process.exit(1);
 }
 
